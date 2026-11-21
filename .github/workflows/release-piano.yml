@@ -1,0 +1,59 @@
+name: Release piano sample set
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-piano.yml]
+
+permissions:
+  contents: write
+
+env:
+  TAG: piano-kw-20220221
+  ARCHIVE: UprightPianoKW-SF2-20220221.7z
+  ARCHIVE_SHA256: 17c084c6e4205233dc49b34e4bc44a9b2d7c7a2c02b04729ecda77079b07c826
+  SF2: UprightPianoKW-20220221.sf2
+  SF2_SHA256: d9f5157720963671906727ca2e12b3293fd822c831bb0de477dd1c5f3ad37108
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stop if the release exists
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download and check the archive
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          curl --fail --location --silent --show-error --retry 3 \
+            --output "$ARCHIVE" \
+            "https://freepats.zenvoid.org/Piano/UprightPianoKW/$ARCHIVE"
+          echo "$ARCHIVE_SHA256  $ARCHIVE" | sha256sum --check
+
+      - name: Extract and check the SF2 file
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          7z x "$ARCHIVE" -oextracted
+          cp "extracted/UprightPianoKW-SF2-20220221/$SF2" .
+          cp extracted/UprightPianoKW-SF2-20220221/readme.txt extracted/UprightPianoKW-SF2-20220221/cc0.txt .
+          echo "$SF2_SHA256  $SF2" | sha256sum --check
+
+      - name: Create the release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" "$SF2" readme.txt cc0.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Upright Piano KW 2022-02-21 (SF2)" \
+            --notes "FreePats Upright Piano KW, version 2022-02-21, SF2 format. Licence: CC0 1.0. Source: https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html"
